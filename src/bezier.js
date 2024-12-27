@@ -569,12 +569,11 @@ class Bezier {
     return abs(acos(s)) < pi / 3;
   }
 
-  reduce() {
+  reduce(step = 0.01) {
     // TODO: examine these var types in more detail...
     let i,
       t1 = 0,
       t2 = 0,
-      step = 0.01,
       segment,
       pass1 = [],
       pass2 = [];
@@ -596,35 +595,43 @@ class Bezier {
       t1 = t2;
     }
 
-    // second pass: further reduce these segments to simple segments
-    pass1.forEach(function (p1) {
-      t1 = 0;
-      t2 = 0;
-      while (t2 <= 1) {
-        for (t2 = t1 + step; t2 <= 1 + step; t2 += step) {
-          segment = p1.split(t1, t2);
-          if (!segment.simple()) {
-            t2 -= step;
-            if (abs(t1 - t2) < step) {
-              // we can never form a reduction
-              return [];
-            }
+    try {
+      // second pass: further reduce these segments to simple segments
+      pass1.forEach(function (p1) {
+        t1 = 0;
+        t2 = 0;
+        while (t2 <= 1) {
+          for (t2 = t1 + step; t2 <= 1 + step; t2 += step) {
             segment = p1.split(t1, t2);
-            segment._t1 = utils.map(t1, 0, 1, p1._t1, p1._t2);
-            segment._t2 = utils.map(t2, 0, 1, p1._t1, p1._t2);
-            pass2.push(segment);
-            t1 = t2;
-            break;
+            if (!segment.simple()) {
+              t2 -= step;
+              if (abs(t1 - t2) < step) {
+                throw new Error("Couldn't find a reduction");
+              }
+              segment = p1.split(t1, t2);
+              segment._t1 = utils.map(t1, 0, 1, p1._t1, p1._t2);
+              segment._t2 = utils.map(t2, 0, 1, p1._t1, p1._t2);
+              pass2.push(segment);
+              t1 = t2;
+              break;
+            }
           }
         }
+        if (t1 < 1) {
+          segment = p1.split(t1, 1);
+          segment._t1 = utils.map(t1, 0, 1, p1._t1, p1._t2);
+          segment._t2 = p1._t2;
+          pass2.push(segment);
+        }
+      });
+    }
+    catch (e) {
+      if (step <= 1e-6) {
+        throw new Error("Step size too small to continue reduction");
       }
-      if (t1 < 1) {
-        segment = p1.split(t1, 1);
-        segment._t1 = utils.map(t1, 0, 1, p1._t1, p1._t2);
-        segment._t2 = p1._t2;
-        pass2.push(segment);
-      }
-    });
+      // try again with a smaller step value
+      return this.reduce(step / 10);
+    }
     return pass2;
   }
 
